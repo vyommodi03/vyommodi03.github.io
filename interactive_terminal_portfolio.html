@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vyom Modi | Interactive Terminal</title>
+    <meta name="description" content="Interactive terminal portfolio for Vyom Modi, Lead Product Engineer.">
+    <style>
+        :root {
+            /* Default Hacker/Dark Theme */
+            --bg-color: #0d0d0d;
+            --terminal-bg: rgba(10, 10, 10, 0.95);
+            --text-color: #00ff41; 
+            --highlight-color: #008f11;
+            --prompt-user: #00aaff;
+            --prompt-host: #00ff41;
+            --prompt-path: #ffaa00;
+            --error-color: #ff3333;
+            --title-bg: #1a1a1a;
+            --title-color: #888;
+            --font-family: 'Fira Code', 'Consolas', 'Courier New', Courier, monospace;
+        }
+
+        [data-theme="ubuntu"] {
+            --bg-color: #2c001e;
+            --terminal-bg: rgba(48, 10, 36, 0.95);
+            --text-color: #ffffff;
+            --highlight-color: #e95420;
+            --prompt-user: #8ae234;
+            --prompt-host: #8ae234;
+            --prompt-path: #729fcf;
+            --title-bg: #3c3b37;
+            --title-color: #dfdbd2;
+        }
+
+        [data-theme="mac"] {
+            --bg-color: #1e1e1e;
+            --terminal-bg: rgba(30, 30, 30, 0.95);
+            --text-color: #f1f1f1;
+            --highlight-color: #4af626;
+            --prompt-user: #4af626;
+            --prompt-host: #4af626;
+            --prompt-path: #34c759;
+            --title-bg: #323233;
+            --title-color: #999;
+        }
+        
+        [data-theme="light"] {
+            --bg-color: #f0f0f0;
+            --terminal-bg: rgba(255, 255, 255, 0.95);
+            --text-color: #333333;
+            --highlight-color: #005cc5;
+            --prompt-user: #d73a49;
+            --prompt-host: #d73a49;
+            --prompt-path: #005cc5;
+            --title-bg: #e1e1e1;
+            --title-color: #333;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-family);
+            font-size: 15px;
+            line-height: 1.6;
+            height: 100vh;
+            overflow: hidden; 
+            transition: background-color 0.3s ease;
+        }
+
+        #matrix-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 1s ease;
+        }
+
+        #matrix-canvas.active {
+            opacity: 0.3;
+        }
+
+        .window-container {
+            width: 100%;
+            max-width: 1000px;
+            height: 90vh;
+            max-height: 800px;
+            background: var(--terminal-bg);
+            border-radius: 8px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            z-index: 1;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255,255,255,0.1);
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            transition: background-color 0.3s ease, border 0.3s ease;
+        }
+
+        .title-bar {
+            height: 30px;
+            background: var(--title-bg);
+            border-top-left-radius: 8px;
+            border-top-right-radius: 8px;
+            display: flex;
+            align-items: center;
+            padding: 0 15px;
+            position: relative;
+            cursor: grab;
+            user-select: none;
+        }
+        
+        .title-bar:active {
+            cursor: grabbing;
+        }
+
+        .window-controls {
+            display: flex;
+            gap: 8px;
+        }
+
+        .control-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .close { background-color: #ff5f56; }
+        .minimize { background-color: #ffbd2e; }
+        .maximize { background-color: #27c93f; }
+
+        .title-text {
+            position: absolute;
+            width: 100%;
+            text-align: center;
+            left: 0;
+            color: var(--title-color);
+            font-size: 13px;
+            font-family: sans-serif;
+            pointer-events: none;
+        }
+
+        .terminal-body {
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto;
+            cursor: text;
+        }
+
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { 
+            background: rgba(128, 128, 128, 0.3); 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(128, 128, 128, 0.6); }
+
+        pre {
+            font-family: inherit;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            margin-bottom: 5px;
+        }
+
+        .output-block { margin-bottom: 15px; }
+        
+        .header {
+            color: var(--highlight-color);
+            font-weight: bold;
+        }
+
+        a {
+            color: var(--prompt-path);
+            text-decoration: none;
+            border-bottom: 1px dashed var(--prompt-path);
+        }
+        a:hover { border-bottom-style: solid; }
+
+        .input-line {
+            display: flex;
+            align-items: flex-start;
+            flex-wrap: wrap;
+        }
+
+        .prompt {
+            margin-right: 8px;
+            white-space: nowrap;
+        }
+        
+        .prompt-user { color: var(--prompt-user); font-weight: bold; }
+        .prompt-at { color: var(--text-color); }
+        .prompt-host { color: var(--prompt-host); font-weight: bold; }
+        .prompt-colon { color: var(--text-color); }
+        .prompt-path { color: var(--prompt-path); font-weight: bold; }
+        .prompt-char { color: var(--text-color); font-weight: bold; }
+
+        #command-input {
+            background: transparent;
+            border: none;
+            color: inherit;
+            font-family: inherit;
+            font-size: inherit;
+            flex-grow: 1;
+            outline: none;
+            min-width: 50%;
+            caret-color: var(--text-color);
+        }
+
+        .ascii-art {
+            color: var(--highlight-color);
+            font-size: 12px;
+            line-height: 1.2;
+            margin-bottom: 20px;
+        }
+
+        .file-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .file-item {
+            color: var(--prompt-user);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="matrix-canvas"></canvas>
+
+    <div class="window-container">
+        <div class="title-bar">
+            <div class="window-controls">
+                <div class="control-dot close"></div>
+                <div class="control-dot minimize"></div>
+                <div class="control-dot maximize"></div>
+            </div>
+            <div class="title-text">vyom@portfolio: ~</div>
+        </div>
+        
+        <div class="terminal-body" id="terminal-body">
+            <div id="output"></div>
+            <div class="input-line">
+                <span class="prompt" id="prompt-container">
+                    <span class="prompt-user">vyom</span><span class="prompt-at">@</span><span class="prompt-host">portfolio</span><span class="prompt-colon">:</span><span class="prompt-path">~</span><span class="prompt-char">$</span>
+                </span>
+                <input type="text" id="command-input" autocomplete="off" spellcheck="false" autofocus>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const outputDiv = document.getElementById('output');
+        const inputField = document.getElementById('command-input');
+        const terminalBody = document.getElementById('terminal-body');
+        const promptHTML = document.getElementById('prompt-container').innerHTML;
+
+        terminalBody.addEventListener('click', () => {
+            inputField.focus();
+        });
+
+        // Fixed backslashes for proper rendering in JS literal
+        const asciiBanner = `
+ __      __                   __  __           _ _ 
+ \\ \\    / /                  |  \\/  |         | (_)
+  \\ \\  / /_   _ ___  _ __    | \\  / | ___   __| |_ 
+   \\ \\/ /| | | / _ \\| '_ \\   | |\\/| |/ _ \\ / _\` | |
+    \\  / | |_| \\___/| | | |  | |  | | (_) | (_| | |
+     \\/   \\__, |\\___|_| |_|  |_|  |_|\\___/ \\__,_|_|
+           __/ |                                   
+          |___/                                    
+`;
+
+        const welcomeMessage = "Welcome to the interactive portfolio of Vyom Modi (v2.0).\nType 'help' to see a list of available commands or 'ls' to view files.";
+
+        const fileSystem = {
+            'about.txt': "Hi, I'm Vyom Modi.\nLead Product Engineer with a focus on autonomous Voice AI agents, distributed systems, and real-time communication platforms. I currently work at Sprinklr, architecting high-scale LLM, RAG, and MCP based solutions.",
+            
+            'experience.txt': `<span class="header">Lead Product Engineer</span> @ Sprinklr (June 2025 - Present) | Gurugram, India
+• Architected autonomous Voice AI agents using LLMs, RAG, and MCP, transitioning the enterprise platform from static routing to dynamic workflow execution.
+• Engineered a continuous ASR-LLM-TTS streaming pipeline resilient to mid-sentence interruptions, slashing inference latency from 5s to 1.5s and perceived latency to 600ms.
+• Led end-to-end system ownership for a platform processing Millions of daily calls, and mentored two developers in migrating from legacy VoiceBots to AI agents.
+
+<span class="header">Senior Product Engineer</span> @ Sprinklr (June 2024 - May 2025) | Gurugram, India
+• Led a team of three engineers with end-to-end ownership of RTS and VoiceBot products, architecting a full-duplex, asynchronous audio pipeline for concurrent speech processing.
+• Architected backend distributed microservices for the new VoiceConnect CPaaS product (AMD, Voicemail, DTMF) and built a centralized telemetry tool that accelerated debugging time by 30%.
+• Secured 99.99% system availability by decoupling intensive Automatic Case Distributor (ACD) workloads into Kafka event queues and engineering robust failover mechanisms.
+
+<span class="header">Product Engineer</span> @ Sprinklr (July 2022 - May 2024) | Gurugram, India
+• Engineered a highly available Real-Time Speech event-driven pipeline (Java, Kafka, MongoDB) and core VoiceBot microservices, scaling the platform to reliably process millions of daily calls.
+• Optimized backend performance by implementing Redis caching (reducing database latency by 10x) and developing custom audio compression algorithms that slashed payloads by 40% and infrastructure costs by 50%.
+• Resolved complex state-management and concurrency challenges for live human-to-bot interactions, seamlessly integrating the stack with global telecom providers (Twilio, Genesys, Exotel).
+
+<span class="header">Product Engineering Intern</span> @ Sprinklr (Jan. 2022 - June 2022) | Gurugram, India
+• Engineered Node.js backend prototypes for an end-to-end conversational audio pipeline integrating VAD, ASR, and TTS models.
+• Resolved production bottlenecks by designing strategic MongoDB indexes, optimizing database performance and reducing slow queries by 80%.
+
+<span class="header">Product Engineering Summer Intern</span> @ Sprinklr (June 2021 - July 2021) | Gurugram, India
+• Engineered an automated test-failure attribution service (Java, MongoDB) with Slack integration.`,
+
+            'skills.txt': `<span class="header">Languages:</span> Java, Python, C++, Go, JavaScript/TypeScript, SQL
+<span class="header">AI & Telephony:</span> LLMs, RAG, Model Context Protocol (MCP), ASR/TTS, WebRTC, SIP
+<span class="header">Databases & Messaging:</span> Apache Kafka, MongoDB, Redis, ElasticSearch, ScyllaDB
+<span class="header">Infrastructure & Architecture:</span> Docker, Kubernetes, Distributed Systems, Microservices, Concurrency`,
+
+            'education.txt': `<span class="header">B.Tech in Information and Communication Technology</span>
+Dhirubhai Ambani Institute of Information and Communication Technology (DA-IICT)
+Gandhinagar, India
+Aug. 2018 - May 2022 | CGPA: 8.83/10`,
+
+            'achievements.txt': `• Recognized as Star Performer of the Year (2023-2024) and awarded the Superstar Award in the Product Engineering Team at Sprinklr.
+• Competitive Programming: Codeforces Expert (vyommodi03), 5-Star on CodeChef (vyommodi03), and 6-Star on HackerRank (vyommodi03).
+• Mentorship & Recruitment: Mentored junior engineers and interns; conducted technical recruitment interviews for Product Engineering roles.`,
+
+            'contact.txt': `<span class="header">Email:</span>    <a href="mailto:vyommodi03@gmail.com">vyommodi03@gmail.com</a>
+<span class="header">Phone:</span>    +91 9825351561
+<span class="header">LinkedIn:</span> <a href="https://linkedin.com/in/vyom-modi" target="_blank">linkedin.com/in/vyom-modi</a>`
+        };
+
+        const availableCommands = ['help', 'ls', 'cat', 'clear', 'theme', 'matrix', 'whoami', 'date', 'echo', 'sudo', 'about', 'experience', 'skills', 'education', 'achievements', 'contact', 'neofetch', 'gui', 'pwd', 'cd', 'snake', 'cowsay', 'calc', 'guess', 'rickroll', 'beer'];
+        const availableThemes = ['hacker', 'ubuntu', 'mac', 'light'];
+
+        let commandHistory = [];
+        let historyIndex = -1;
+        let guessTarget = null;
+        let guessCount = 0;
+
+        inputField.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                const command = this.value;
+                if(command.trim() !== '') {
+                    commandHistory.push(command);
+                    historyIndex = commandHistory.length;
+                    processCommand(command);
+                } else {
+                    printCommandEcho('');
+                    scrollToBottom();
+                }
+                this.value = '';
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (historyIndex > 0) {
+                    historyIndex--;
+                    this.value = commandHistory[historyIndex];
+                }
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (historyIndex < commandHistory.length - 1) {
+                    historyIndex++;
+                    this.value = commandHistory[historyIndex];
+                } else {
+                    historyIndex = commandHistory.length;
+                    this.value = '';
+                }
+            } else if (e.key === 'Tab') {
+                e.preventDefault();
+                handleAutocomplete(this.value);
+            }
+        });
+
+        function handleAutocomplete(currentInput) {
+            const parts = currentInput.split(' ');
+            const lastPart = parts[parts.length - 1].toLowerCase();
+            
+            let matches = [];
+            
+            if (parts.length === 1) {
+                matches = availableCommands.filter(cmd => cmd.startsWith(lastPart));
+            } else if (parts[0] === 'cat') {
+                const files = Object.keys(fileSystem);
+                matches = files.filter(f => f.startsWith(lastPart));
+            }
+
+            if (matches.length === 1) {
+                parts[parts.length - 1] = matches[0];
+                inputField.value = parts.join(' ') + ' ';
+            } else if (matches.length > 1) {
+                printCommandEcho(currentInput);
+                printOutput(matches.join('  '));
+                inputField.value = currentInput; 
+                scrollToBottom();
+            }
+        }
+
+        function printOutput(text, isHTML = false) {
+            const div = document.createElement('div');
+            div.className = 'output-block';
+            if (isHTML) {
+                div.innerHTML = text;
+            } else {
+                const pre = document.createElement('pre');
+                pre.innerHTML = text;
+                div.appendChild(pre);
+            }
+            outputDiv.appendChild(div);
+        }
+
+        function printCommandEcho(cmd) {
+            const div = document.createElement('div');
+            div.className = 'output-block';
+            div.style.marginBottom = '5px';
+            div.innerHTML = `<span class="prompt">${promptHTML}</span><span>${escapeHTML(cmd)}</span>`;
+            outputDiv.appendChild(div);
+        }
+
+        function escapeHTML(str) {
+            return str.replace(/[&<>'"]/g, tag => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+            }[tag]));
+        }
+
+        function scrollToBottom() {
+            terminalBody.scrollTop = terminalBody.scrollHeight;
+        }
+
+        function processCommand(rawCmd) {
+            const cmdParts = rawCmd.trim().split(/\s+/);
+            const cmd = cmdParts[0].toLowerCase();
+            const args = cmdParts.slice(1);
+
+            printCommandEcho(rawCmd);
+
+            switch(cmd) {
+                case 'help':
+                    printOutput(`<pre>
+Available commands:
+  <span class="header">ls</span>         - List files in current directory
+  <span class="header">cat &lt;file&gt;</span> - Read file contents (e.g., cat experience.txt)
+  <span class="header">theme &lt;t&gt;</span>  - Change terminal theme [hacker, ubuntu, mac, light]
+  <span class="header">matrix</span>     - Toggle the matrix
+  <span class="header">neofetch</span>   - Display system & profile information
+  <span class="header">snake</span>      - Play a game of Snake in the terminal
+  <span class="header">cowsay</span>     - Make the ASCII cow say something
+  <span class="header">calc</span>       - Evaluate a math expression (e.g., calc 2 + 2)
+  <span class="header">guess</span>      - Play a number guessing game
+  <span class="header">clear</span>      - Clear terminal output
+  <span class="header">date</span>       - Print current date and time
+  <span class="header">whoami</span>     - Print effective user id
+  <span class="header">gui</span>        - Launch graphical user interface mode
+  
+Shortcuts (no cat required):
+  about, experience, skills, education, achievements, contact
+</pre>`, true);
+                    break;
+                case 'ls':
+                    let fileHTML = '<div class="file-list">';
+                    Object.keys(fileSystem).forEach(file => {
+                        fileHTML += `<span class="file-item">${file}</span>`;
+                    });
+                    fileHTML += '</div>';
+                    printOutput(fileHTML, true);
+                    break;
+                case 'cat':
+                    if (args.length === 0) {
+                        printOutput("cat: missing operand");
+                    } else {
+                        const filename = args[0].toLowerCase();
+                        const targetFile = filename.endsWith('.txt') ? filename : filename + '.txt';
+                        if (fileSystem[targetFile]) {
+                            printOutput(`<pre>${fileSystem[targetFile]}</pre>`, true);
+                        } else {
+                            printOutput(`cat: ${filename}: No such file or directory`, false);
+                        }
+                    }
+                    break;
+                case 'theme':
+                    if (args.length === 0) {
+                        printOutput(`Usage: theme <name>\nAvailable themes: ${availableThemes.join(', ')}`);
+                    } else if (availableThemes.includes(args[0])) {
+                        document.documentElement.setAttribute('data-theme', args[0]);
+                        printOutput(`Theme set to ${args[0]}`);
+                    } else {
+                        printOutput(`Theme not found. Available themes: ${availableThemes.join(', ')}`);
+                    }
+                    break;
+                case 'matrix':
+                    toggleMatrix();
+                    printOutput("Matrix toggled.");
+                    break;
+                case 'clear':
+                case 'cls':
+                    outputDiv.innerHTML = '';
+                    break;
+                case 'whoami':
+                    printOutput('guest');
+                    break;
+                case 'date':
+                    printOutput(new Date().toString());
+                    break;
+                case 'echo':
+                    printOutput(escapeHTML(args.join(' ')));
+                    break;
+                case 'sudo':
+                    if (args.join(' ') === 'rm -rf /') {
+                        printOutput(`<span style="color: var(--error-color);">Nuking system in 3... 2... 1...</span>`, true);
+                        setTimeout(() => { document.body.innerHTML = '<h1 style="color:red; text-align:center; margin-top: 20%; font-family: monospace;">SYSTEM CORRUPTED. REBOOT REQUIRED.</h1>'; }, 1500);
+                    } else {
+                        printOutput(`<span style="color: var(--error-color);">guest is not in the sudoers file. This incident will be reported.</span>`, true);
+                    }
+                    break;
+                case 'pwd':
+                    printOutput('/home/vyom/portfolio');
+                    break;
+                case 'cd':
+                    printOutput(`cd: ${args[0] || '~'}: Permission denied (guest account)`);
+                    break;
+                case 'snake':
+                    startSnakeGame();
+                    break;
+                case 'cowsay':
+                    const cowText = args.length > 0 ? args.join(' ') : "Moo!";
+                    const dash = '-'.repeat(cowText.length + 2);
+                    const bubble = `  ${dash}\n< ${cowText} >\n  ${dash}\n`;
+                    const cow = `        \\   ^__^\n         \\  (oo)\\_______\n            (__)\\       )\\/\\\n                ||----w |\n                ||     ||`;
+                    printOutput(`<pre style="color: var(--highlight-color);">${bubble}${cow}</pre>`, true);
+                    break;
+                case 'calc':
+                    if (args.length === 0) {
+                        printOutput('Usage: calc <expression>');
+                        break;
+                    }
+                    try {
+                        const safeMath = args.join('').replace(/[^0-9+\-*/().]/g, '');
+                        if(!safeMath) throw new Error();
+                        const result = new Function('return ' + safeMath)();
+                        printOutput(`<span style="color: var(--prompt-path);">${result}</span>`, true);
+                    } catch(e) {
+                        printOutput('<span style="color: var(--error-color);">calc: invalid math expression</span>', true);
+                    }
+                    break;
+                case 'neofetch':
+                case 'fetch':
+                    const neofetchArt = `
+<div style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap; margin-bottom: 10px;">
+<div style="color: var(--highlight-color); font-weight: bold; line-height: 1.2;">
+       /\\
+      /  \\
+     /    \\
+    /      \\
+   /   /\\   \\
+  /   /  \\   \\
+ /   /    \\   \\
+/___/      \\___\\
+</div>
+<div>
+<span style="color: var(--highlight-color); font-weight: bold;">vyom</span>@<span style="color: var(--highlight-color); font-weight: bold;">portfolio</span>
+-------------------
+<span style="color: var(--prompt-path); font-weight: bold;">OS:</span> VyomOS v2.0
+<span style="color: var(--prompt-path); font-weight: bold;">Host:</span> Sprinklr | Gurugram
+<span style="color: var(--prompt-path); font-weight: bold;">Kernel:</span> Lead Product Engineer
+<span style="color: var(--prompt-path); font-weight: bold;">Uptime:</span> 4 years, 2 months
+<span style="color: var(--prompt-path); font-weight: bold;">Packages:</span> 1520 (npm), 340 (pip)
+<span style="color: var(--prompt-path); font-weight: bold;">Shell:</span> zsh 5.8
+<span style="color: var(--prompt-path); font-weight: bold;">Terminal:</span> Web-Term
+<span style="color: var(--prompt-path); font-weight: bold;">CPU:</span> Autonomous Voice AI / LLMs
+<span style="color: var(--prompt-path); font-weight: bold;">Memory:</span> Redis + MongoDB
+</div>
+</div>`;
+                    printOutput(neofetchArt, true);
+                    break;
+                case 'gui':
+                    printOutput("Initializing GUI mode...");
+                    setTimeout(() => {
+                        document.body.style.transition = "transform 1.5s ease-in-out, opacity 1.5s ease-in-out";
+                        document.body.style.transform = "rotate(360deg) scale(0)";
+                        document.body.style.opacity = "0";
+                        
+                        setTimeout(() => {
+                            alert("ERROR 404: GUI NOT FOUND. Returning to CLI...");
+                            document.body.style.transform = "rotate(0deg) scale(1)";
+                            document.body.style.opacity = "1";
+                            printOutput("GUI launch failed. Terminal is the only way.", false);
+                            scrollToBottom();
+                        }, 2000);
+                    }, 500);
+                    break;
+                case 'rickroll':
+                    printOutput(`<span style="color: var(--highlight-color);">♪ Never gonna give you up, never gonna let you down... ♪</span>`, true);
+                    setTimeout(() => { window.open('https://www.youtube.com/watch?v=dQw4w9WgXcQ', '_blank'); }, 1000);
+                    break;
+                case 'beer':
+                    printOutput(`<pre style="color: #e67e22; line-height: 1.1;">
+      ~  ~
+     ( o )o)
+    ( o )o )o)
+   (o( ~~~~~~~~o 
+   ( )' ~~~~~~~'
+   ( )|)       |-.
+     o|        |-. \\
+     o|        |  \\ \\
+      |        |   | |
+     o|        |  / /
+      |        |." "
+      |        |- '
+      .========. 
+                    </pre>`, true);
+                    break;
+                case 'guess':
+                    if (guessTarget === null) {
+                        guessTarget = Math.floor(Math.random() * 100) + 1;
+                        guessCount = 0;
+                        printOutput("I've picked a number between 1 and 100. Type 'guess &lt;number&gt;' to play! (or 'guess quit')");
+                    } else if (args[0] === 'quit') {
+                        guessTarget = null;
+                        printOutput("Guess the number game aborted.");
+                    } else if (args.length > 0) {
+                        const g = parseInt(args[0]);
+                        if (isNaN(g)) {
+                            printOutput("Please enter a valid number. (e.g., 'guess 42')");
+                        } else {
+                            guessCount++;
+                            if (g === guessTarget) {
+                                printOutput(`<span style="color: var(--highlight-color);">Congratulations! You guessed the number ${guessTarget} in ${guessCount} tries.</span>`, true);
+                                guessTarget = null;
+                            } else if (g < guessTarget) {
+                                printOutput("Higher!");
+                            } else {
+                                printOutput("Lower!");
+                            }
+                        }
+                    } else {
+                        printOutput("Game in progress! Type 'guess &lt;number&gt;' to guess.");
+                    }
+                    break;
+                case 'about':
+                case 'experience':
+                case 'skills':
+                case 'education':
+                case 'achievements':
+                case 'contact':
+                    printOutput(`<pre>${fileSystem[cmd + '.txt']}</pre>`, true);
+                    break;
+                default:
+                    printOutput(`bash: ${escapeHTML(cmd)}: command not found. Type 'help' for a list of commands.`);
+            }
+            scrollToBottom();
+        }
+
+        const canvas = document.getElementById('matrix-canvas');
+        const ctx = canvas.getContext('2d');
+        let matrixInterval;
+        let matrixActive = false;
+
+        function initMatrix() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+
+            const katakana = 'アァカサタナハマヤャラワガザダバパイィキシチニヒミリヰギジヂビピウゥクスツヌフムユュルグズブヅプエェケセテネヘメレゲゼデベペオォコソトノホモヨョロゴゾドボポヴッン';
+            const latin = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+            const nums = '0123456789';
+            const alphabet = katakana + latin + nums;
+
+            const fontSize = 16;
+            const columns = canvas.width / fontSize;
+            const rainDrops = [];
+
+            for (let x = 0; x < columns; x++) {
+                rainDrops[x] = 1;
+            }
+
+            const draw = () => {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                ctx.fillStyle = '#0F0';
+                ctx.font = fontSize + 'px monospace';
+
+                for (let i = 0; i < rainDrops.length; i++) {
+                    const text = alphabet.charAt(Math.floor(Math.random() * alphabet.length));
+                    ctx.fillText(text, i * fontSize, rainDrops[i] * fontSize);
+
+                    if (rainDrops[i] * fontSize > canvas.height && Math.random() > 0.975) {
+                        rainDrops[i] = 0;
+                    }
+                    rainDrops[i]++;
+                }
+            };
+            
+            return setInterval(draw, 30);
+        }
+
+        function toggleMatrix() {
+            matrixActive = !matrixActive;
+            if (matrixActive) {
+                canvas.classList.add('active');
+                matrixInterval = initMatrix();
+            } else {
+                canvas.classList.remove('active');
+                clearInterval(matrixInterval);
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+        }
+
+        window.addEventListener('resize', () => {
+            if (matrixActive) {
+                clearInterval(matrixInterval);
+                matrixInterval = initMatrix();
+            }
+        });
+
+        const winContainer = document.querySelector('.window-container');
+        const titleBar = document.querySelector('.title-bar');
+        let isDragging = false;
+        let startX, startY, initialLeft, initialTop;
+
+        titleBar.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            
+            const rect = winContainer.getBoundingClientRect();
+            winContainer.style.transform = 'none';
+            winContainer.style.left = rect.left + 'px';
+            winContainer.style.top = rect.top + 'px';
+            
+            initialLeft = rect.left;
+            initialTop = rect.top;
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+            winContainer.style.left = (initialLeft + dx) + 'px';
+            winContainer.style.top = (initialTop + dy) + 'px';
+        });
+
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+
+        function startSnakeGame() {
+            inputField.disabled = true;
+            inputField.blur();
+            
+            const gameContainer = document.createElement('div');
+            gameContainer.style.outline = '1px solid var(--highlight-color)';
+            gameContainer.style.width = '300px';
+            gameContainer.style.height = '300px';
+            gameContainer.style.position = 'relative';
+            gameContainer.style.marginBottom = '15px';
+            gameContainer.style.backgroundColor = 'rgba(0,0,0,0.5)';
+            gameContainer.style.display = 'block';
+            
+            const canvas = document.createElement('canvas');
+            canvas.width = 300;
+            canvas.height = 300;
+            gameContainer.appendChild(canvas);
+            
+            const instruction = document.createElement('div');
+            instruction.style.color = 'var(--title-color)';
+            instruction.style.fontSize = '12px';
+            instruction.style.marginBottom = '10px';
+            instruction.innerHTML = 'Use <b>W A S D</b> or <b>Arrow Keys</b> to move. Press <b>Q</b> to quit.';
+            
+            outputDiv.appendChild(instruction);
+            outputDiv.appendChild(gameContainer);
+            scrollToBottom();
+            
+            const ctx = canvas.getContext('2d');
+            const gridSize = 15;
+            const tileCount = canvas.width / gridSize;
+            
+            let snake = [{x: 10, y: 10}];
+            let food = {x: 15, y: 15};
+            let dx = 0;
+            let dy = 0;
+            let score = 0;
+            let gameInterval;
+            
+            function draw() {
+                const head = {x: snake[0].x + dx, y: snake[0].y + dy};
+                
+                if (head.x < 0) head.x = tileCount - 1;
+                if (head.x >= tileCount) head.x = 0;
+                if (head.y < 0) head.y = tileCount - 1;
+                if (head.y >= tileCount) head.y = 0;
+                
+                if (dx !== 0 || dy !== 0) {
+                    for (let i = 0; i < snake.length; i++) {
+                        if (head.x === snake[i].x && head.y === snake[i].y) {
+                            endGame();
+                            return;
+                        }
+                    }
+                    snake.unshift(head);
+                    
+                    if (head.x === food.x && head.y === food.y) {
+                        score++;
+                        food = {
+                            x: Math.floor(Math.random() * tileCount),
+                            y: Math.floor(Math.random() * tileCount)
+                        };
+                    } else {
+                        snake.pop();
+                    }
+                }
+                
+                ctx.fillStyle = 'black';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                ctx.fillStyle = '#ff3333';
+                ctx.fillRect(food.x * gridSize, food.y * gridSize, gridSize - 1, gridSize - 1);
+                
+                ctx.fillStyle = '#00ff41';
+                for (let i = 0; i < snake.length; i++) {
+                    ctx.fillRect(snake[i].x * gridSize, snake[i].y * gridSize, gridSize - 1, gridSize - 1);
+                }
+                
+                ctx.fillStyle = '#fff';
+                ctx.font = '12px monospace';
+                ctx.fillText('Score: ' + score, 5, 15);
+            }
+            
+            function handleInput(e) {
+                if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," "].indexOf(e.code) > -1) {
+                    e.preventDefault();
+                }
+                
+                if (e.key === 'q' || e.key === 'Q' || e.key === 'Escape') {
+                    endGame();
+                    return;
+                }
+                
+                if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
+                    if (dy !== 1) { dx = 0; dy = -1; }
+                } else if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
+                    if (dy !== -1) { dx = 0; dy = 1; }
+                } else if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+                    if (dx !== 1) { dx = -1; dy = 0; }
+                } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+                    if (dx !== -1) { dx = 1; dy = 0; }
+                }
+            }
+            
+            function endGame() {
+                clearInterval(gameInterval);
+                document.removeEventListener('keydown', handleInput);
+                
+                ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                ctx.fillRect(0,0,canvas.width,canvas.height);
+                ctx.fillStyle = '#00ff41';
+                ctx.font = '20px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText('GAME OVER', canvas.width/2, canvas.height/2);
+                ctx.font = '14px monospace';
+                ctx.fillText('Score: ' + score, canvas.width/2, canvas.height/2 + 25);
+                
+                printOutput(`Snake game ended. Final score: ${score}`);
+                
+                inputField.disabled = false;
+                setTimeout(() => { 
+                    inputField.focus(); 
+                    scrollToBottom();
+                }, 100);
+            }
+            
+            document.addEventListener('keydown', handleInput);
+            gameInterval = setInterval(draw, 100);
+        }
+
+        let isBooting = true;
+        const bootSequence = [
+            "INIT: version 2.88 booting",
+            "Loading OS kernels...",
+            "[ OK ] Mounted Virtual File System.",
+            "[ OK ] Started Network Manager.",
+            "[ OK ] Reached target Network is Online.",
+            "Starting LLM routing protocols...",
+            "[ OK ] Started autonomous Voice AI agents.",
+            "[ OK ] Connected to Sprinklr mainframe.",
+            "Mounting resume data... [ OK ]",
+            "Starting User Interface...",
+            "Welcome to VyomOS."
+        ];
+
+        function skipBoot() {
+            if (!isBooting) return;
+            isBooting = false;
+            outputDiv.innerHTML = '';
+            document.removeEventListener('keydown', skipBootHandler);
+            document.removeEventListener('click', skipBootHandler);
+            startTerminal();
+        }
+
+        const skipBootHandler = (e) => {
+            if (isBooting && (e.type === 'click' || e.key === 'Enter' || e.key === 'Escape')) {
+                skipBoot();
+            }
+        };
+
+        function startTerminal() {
+            inputField.disabled = false;
+            
+            const bannerDiv = document.createElement('pre');
+            bannerDiv.className = 'ascii-art';
+            bannerDiv.textContent = asciiBanner;
+            outputDiv.appendChild(bannerDiv);
+            
+            printOutput(welcomeMessage, false);
+            setTimeout(() => {
+                inputField.focus();
+                scrollToBottom();
+            }, 10);
+        }
+
+        window.onload = () => {
+            outputDiv.innerHTML = ''; 
+            inputField.disabled = true;
+            document.addEventListener('keydown', skipBootHandler);
+            document.addEventListener('click', skipBootHandler);
+            
+            let i = 0;
+            printOutput("<span style='color: #888; font-style: italic;'>(Press Enter or Click to skip boot sequence)</span>", true);
+            
+            function printBootMessage() {
+                if (!isBooting) return;
+                if (i < bootSequence.length) {
+                    printOutput(`<span style="color: #aaa;">${bootSequence[i]}</span>`, true);
+                    scrollToBottom();
+                    i++;
+                    setTimeout(printBootMessage, 100 + Math.random() * 300); 
+                } else {
+                    setTimeout(skipBoot, 500);
+                }
+            }
+            
+            setTimeout(printBootMessage, 200);
+        };
+    </script>
+</body>
+</html>
