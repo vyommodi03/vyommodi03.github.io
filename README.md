@@ -7,6 +7,14 @@
 </div>
 
 <br/>
+<div align="center">
+  <a href="https://vyommodi03.github.io/">
+    <img width="1440" height="700" alt="image" src="https://github.com/user-attachments/assets/c4f48b83-fc5c-4009-9543-6d6806c10a98" />
+  </a>
+</div>
+
+<br/>
+
 
 Welcome to the source code for my interactive, command-line interface (CLI) style portfolio. 
 
